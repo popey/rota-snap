@@ -1,0 +1,4 @@
+#!/bin/bash
+
+cd "$SNAP_USER_COMMON"
+"$SNAP"/bin/ROTA.x86_64 "$@"
