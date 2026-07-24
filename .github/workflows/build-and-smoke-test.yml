@@ -1,0 +1,79 @@
+name: Build, review and smoke-test snap
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes python3-yaml=5.4.1-1ubuntu1 squashfs-tools=1:4.5-3build1
+
+      - name: Test recipe and release assets
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Install pinned build and review tools
+        run: |
+          sudo snap install snapcraft --classic --revision=18514
+          sudo snap install review-tools --revision=4865
+          test "$(snapcraft --version)" = "snapcraft 9.0.1"
+
+      - name: Build snap
+        id: build
+        run: |
+          shopt -s nullglob
+          BEFORE=("$GITHUB_WORKSPACE"/*.snap)
+          test "${#BEFORE[@]}" -eq 0
+          sudo --preserve-env=GITHUB_WORKSPACE snapcraft pack --destructive-mode
+          ARTIFACTS=("$GITHUB_WORKSPACE"/*.snap)
+          test "${#ARTIFACTS[@]}" -eq 1
+          SNAP="${ARTIFACTS[0]}"
+          echo "snap=$SNAP" >> "$GITHUB_OUTPUT"
+
+      - name: Repack snap for Store review
+        env:
+          SNAP: ${{ steps.build.outputs.snap }}
+        run: |
+          ROOT="$RUNNER_TEMP/snap-root"
+          OUT="$RUNNER_TEMP/repacked"
+          mkdir -p "$OUT"
+          unsquashfs -d "$ROOT" "$SNAP"
+          snapcraft pack "$ROOT" --output "$OUT/$(basename "$SNAP")"
+          mv "$OUT/$(basename "$SNAP")" "$SNAP"
+
+      - name: Review snap
+        env:
+          SNAP: ${{ steps.build.outputs.snap }}
+        run: review-tools.snap-review "$SNAP"
+
+      - name: Install and smoke-test snap
+        env:
+          SNAP: ${{ steps.build.outputs.snap }}
+        run: |
+          sudo snap install --dangerous "$SNAP"
+          test "$(snap run rota --version)" = "3.6.1.stable.official.b1ba98fce"
+          timeout 30 snap run rota --headless --quit
+          snap run --shell rota -c 'test -x "$SNAP/bin/ROTA.x86_64" && test -s "$SNAP/bin/ROTA.pck"'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rota-snap
+          path: ${{ steps.build.outputs.snap }}
+          if-no-files-found: error
