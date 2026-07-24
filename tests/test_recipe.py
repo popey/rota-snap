@@ -61,9 +61,14 @@ class WorkflowTest(unittest.TestCase):
         self.assertIn('test "${#BEFORE[@]}" -eq 0', by_name["Build snap"]["run"])
         self.assertIn('test "${#ARTIFACTS[@]}" -eq 1', by_name["Build snap"]["run"])
         self.assertIn("review-tools.snap-review", by_name["Review snap"]["run"])
+        dependencies = by_name["Install test dependencies"]["run"]
+        self.assertIn("xvfb", dependencies)
+        self.assertIn("xauth", dependencies)
         smoke = by_name["Install and smoke-test snap"]["run"]
         self.assertIn("snap install --dangerous", smoke)
         self.assertIn("snap run rota --version", smoke)
+        self.assertIn("xvfb-run --auto-servernum", smoke)
+        self.assertIn("-screen 0 1280x720x24", smoke)
         self.assertIn("snap run rota --headless --quit", smoke)
         self.assertEqual(
             by_name["Upload artifact"]["uses"],

@@ -23,7 +23,7 @@ jobs:
       - name: Install test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes python3-yaml=5.4.1-1ubuntu1 squashfs-tools=1:4.5-3build1
+          sudo apt-get install --yes python3-yaml=5.4.1-1ubuntu1 squashfs-tools=1:4.5-3build1 xauth xvfb
 
       - name: Test recipe and release assets
         run: python3 -m unittest discover -s tests -v
@@ -68,7 +68,8 @@ jobs:
         run: |
           sudo snap install --dangerous "$SNAP"
           test "$(snap run rota --version)" = "3.6.1.stable.official.b1ba98fce"
-          timeout 30 snap run rota --headless --quit
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24 -nolisten tcp" \
+            timeout 30 snap run rota --headless --quit
           snap run --shell rota -c 'test -x "$SNAP/bin/ROTA.x86_64" && test -s "$SNAP/bin/ROTA.pck"'
 
       - name: Upload artifact
